@@ -306,12 +306,21 @@ class MDLParser {
             pubKeyBytes = publicKey;
           }
 
+          this.logger(`[DEBUG EMacKey] privKeyBytes: ${Buffer.from(privKeyBytes).toString('hex').toUpperCase()}`);
+          this.logger(`[DEBUG EMacKey] pubKeyBytes: ${Buffer.from(pubKeyBytes).toString('hex').toUpperCase()}`);
+
           const ecdh = crypto.createECDH('prime256v1');
           ecdh.setPrivateKey(Buffer.from(privKeyBytes));
           const sharedSecret = ecdh.computeSecret(Buffer.from(pubKeyBytes));
+          this.logger(`[DEBUG EMacKey] sharedSecret: ${sharedSecret.toString('hex').toUpperCase()}`);
 
-          const salt = crypto.createHash('sha256').update(sessionTranscriptBytes).digest();
+          const salt = sessionTranscriptBytes;
+          this.logger(`[DEBUG EMacKey] salt (len ${salt.length}): ${salt.toString('hex').toUpperCase()}`);
+          this.logger(`[DEBUG EMacKey] info: "${info}"`);
+          this.logger(`[DEBUG EMacKey] sessionTranscriptBytes (len ${sessionTranscriptBytes.length}): ${Buffer.from(sessionTranscriptBytes).toString('hex').toUpperCase()}`);
+
           const derivedKeyBytes = crypto.hkdfSync('sha256', sharedSecret, salt, Buffer.from(info, 'utf8'), 32);
+          this.logger(`[DEBUG EMacKey] derivedKeyBytes: ${Buffer.from(derivedKeyBytes).toString('hex').toUpperCase()}`);
 
           return CoseKey.create({ keyType: KeyType.Oct, curve: new Uint8Array(derivedKeyBytes) });
         }
@@ -361,9 +370,8 @@ class MDLParser {
               const toBeAuthenticated = mac0.toBeAuthenticated;
               const expectedTag = mac0.tag;
 
-              this.logger(`[Verification] Mac0 key extracted: ${keyBytes ? Buffer.from(keyBytes).toString('hex').toUpperCase().substring(0, 16) + '...' : 'undefined'}`);
+              this.logger(`[Verification] Mac0 key extracted: ${keyBytes ? Buffer.from(keyBytes).toString('hex').toUpperCase() : 'undefined'}`);
               this.logger(`[Verification] Mac0 keyType: ${key.keyType}`);
-              this.logger(`[Verification] Mac0 toBeAuthenticated length: ${toBeAuthenticated.length} bytes`);
               this.logger(`[Verification] Mac0 expectedTag: ${Buffer.from(expectedTag).toString('hex').toUpperCase()}`);
 
               if (!keyBytes) {
@@ -371,8 +379,28 @@ class MDLParser {
                 return false;
               }
 
+              // Translate 3-element array (buggy library output) to standard 4-element array (expected by wallet)
+              let dataToVerify = toBeAuthenticated;
+              try {
+                const decoded = cborDecode(toBeAuthenticated);
+                if (decoded && decoded.length === 3) {
+                  const standardArray = [
+                    decoded[0],      // 'MAC0'
+                    decoded[1],      // protectedHeaders
+                    Buffer.alloc(0), // empty externalAad
+                    decoded[2]       // payload
+                  ];
+                  dataToVerify = cborEncode(standardArray);
+                  this.logger(`[Verification] Mac0 translated 3-element array to standard 4-element array (new len: ${dataToVerify.length})`);
+                }
+              } catch (decodeErr) {
+                this.logger(`[Verification] Mac0 CBOR translation failed, using original: ${decodeErr.message}`);
+              }
+
+              this.logger(`[Verification] Mac0 dataToVerify (len ${dataToVerify.length}): ${Buffer.from(dataToVerify).toString('hex').toUpperCase()}`);
+
               const computedTag = crypto.createHmac('sha256', keyBytes)
-                                        .update(toBeAuthenticated)
+                                        .update(dataToVerify)
                                         .digest();
 
               this.logger(`[Verification] Mac0 computedTag: ${computedTag.toString('hex').toUpperCase()}`);
