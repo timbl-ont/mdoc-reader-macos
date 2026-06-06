@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ISO 18013-5 mdoc/mDL Reader</title>
+  <link rel="stylesheet" href="index.css">
+  <!-- Modern sans-serif typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- Executive Dashboard Container -->
+  <div class="dashboard">
+    
+    <!-- Sidebar Controls Panel -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <line x1="7" y1="8" x2="17" y2="8" />
+            <line x1="7" y1="12" x2="13" y2="12" />
+            <line x1="7" y1="16" x2="11" y2="16" />
+          </svg>
+        </div>
+        <div>
+          <h1>mdoc Verifier</h1>
+          <p>ISO 18013-5 Reader</p>
+        </div>
+      </div>
+
+      <div class="controls-section">
+        <h2>Actions</h2>
+        <button id="btn-scan" class="btn btn-primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M5 3a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H5z" />
+            <path d="M12 8v8" /><path d="M8 12h8" />
+          </svg>
+          Start Listening
+        </button>
+        <button id="btn-stop" class="btn btn-secondary" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="4" y="4" width="16" height="16" rx="2" />
+          </svg>
+          Stop Reader
+        </button>
+        <button id="btn-simulate" class="btn btn-accent">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="5 3 19 12 5 21 5 3" />
+          </svg>
+          Run Hardware Simulator
+        </button>
+      </div>
+
+      <div class="status-panel">
+        <h2>System Status</h2>
+        <div class="status-indicator-container">
+          <span id="status-dot" class="status-dot state-idle"></span>
+          <span id="status-text" class="status-text">Idle</span>
+        </div>
+        <p id="status-desc" class="status-desc">Device interfaces ready.</p>
+      </div>
+    </aside>
+
+    <!-- Main Workspace -->
+    <main class="workspace">
+      
+      <!-- Top Title Bar -->
+      <header class="titlebar">
+        <div class="window-controls-spacer"></div>
+        <div class="session-info">
+          <span>Target Curve: <strong>P-256</strong></span>
+          <span class="divider">|</span>
+          <span>Cipher Suite: <strong>1 (AES-256-GCM)</strong></span>
+        </div>
+      </header>
+
+      <!-- Central View Content -->
+      <section class="content-view">
+        
+        <!-- Welcome / Idle Radar State -->
+        <div id="view-placeholder" class="view-panel active">
+          <div class="radar-box">
+            <div class="radar-circle circle-1"></div>
+            <div class="radar-circle circle-2"></div>
+            <div class="radar-circle circle-3"></div>
+            <div class="radar-scanner"></div>
+            <div class="radar-center">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z" />
+                <path d="M12 6v6l4 2" />
+              </svg>
+            </div>
+          </div>
+          <h3>Ready for Presentation</h3>
+          <p>Tap a mobile driving license (mDL) on the NFC reader or trigger the Hardware Simulator to begin the verification protocol.</p>
+        </div>
+
+        <!-- mDL Card Grid Display -->
+        <div id="view-profile" class="view-panel">
+          <div class="mdl-card">
+            
+            <!-- Card Header -->
+            <div class="mdl-card-header">
+              <div class="dmv-seal">
+                <span>OFFICIAL DIGITAL CREDENTIAL</span>
+              </div>
+              <div id="verification-status-badge" class="verification-status-badge unverified">
+                <span class="badge-dot"></span>
+                <span class="badge-text">UNVERIFIED</span>
+              </div>
+              <div class="mdl-doc-title">MOBILE DRIVER LICENSE</div>
+            </div>
+
+            <!-- Card Body -->
+            <div class="mdl-card-body">
+              
+              <!-- Photo Container -->
+              <div class="mdl-portrait-container">
+                <img id="mdl-photo" src="" alt="mDL Portrait">
+              </div>
+
+              <!-- Attributes Grid -->
+              <div class="mdl-attributes">
+                <div class="attr-group full-width">
+                  <label>Family Name</label>
+                  <span id="mdl-lastname" class="val">-</span>
+                </div>
+                <div class="attr-group full-width">
+                  <label>Given Name(s)</label>
+                  <span id="mdl-firstname" class="val">-</span>
+                </div>
+                <div class="attr-group">
+                  <label>Document Number</label>
+                  <span id="mdl-docnum" class="val highlight">-</span>
+                </div>
+                <div class="attr-group">
+                  <label>Date of Birth</label>
+                  <span id="mdl-dob" class="val">-</span>
+                </div>
+                <div class="attr-group">
+                  <label>Issue Date</label>
+                  <span id="mdl-issue" class="val">-</span>
+                </div>
+                <div class="attr-group">
+                  <label>Expiry Date</label>
+                  <span id="mdl-expiry" class="val">-</span>
+                </div>
+                <div class="attr-group full-width">
+                  <label>Issuing Authority</label>
+                  <span id="mdl-authority" class="val">-</span>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Driving Privileges Overlay -->
+            <div id="mdl-privileges-box" class="mdl-privileges-box">
+              <h4>Driving Privileges</h4>
+              <div id="mdl-privileges-list" class="privileges-list">
+                <!-- Programmatically populated -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Cryptographic Integrity Summary -->
+          <div class="verification-box">
+            <h3>Cryptographic Verification Audit</h3>
+            <ul id="verification-list" class="verification-list">
+              <!-- Programmatically populated -->
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- Terminal / Logs Console Panel -->
+      <footer class="console-panel">
+        <div class="console-header">
+          <span>Hardware Interface Logs (APDU & BLE Streams)</span>
+          <button id="btn-clear-console" class="btn-clear">Clear Console</button>
+        </div>
+        <div id="console-output" class="console-output">
+          <div class="log-line system">[System] Verifier terminal loaded. Ready.</div>
+        </div>
+      </footer>
+    </main>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

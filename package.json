@@ -1,0 +1,29 @@
+{
+  "name": "mdoc-reader",
+  "version": "1.0.0",
+  "description": "ISO 18013-5 mdoc/mDL reader via NFC (CCID) and BLE",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "rebuild": "electron-rebuild"
+  },
+  "dependencies": {
+    "@abandonware/noble": "^1.9.2-19",
+    "@owf/mdoc": "0.6.0",
+    "@pokusew/pcsclite": "^0.6.0"
+  },
+  "devDependencies": {
+    "electron": "^30.0.1",
+    "@electron/rebuild": "^3.3.0"
+  },
+  "keywords": [
+    "mdoc",
+    "mdl",
+    "iso-18013-5",
+    "nfc",
+    "ble",
+    "electron"
+  ],
+  "author": "Antigravity",
+  "license": "Apache-2.0"
+}
