@@ -30,38 +30,53 @@ const verificationList = document.getElementById('verification-list');
 let isListening = false;
 
 function clearPreviousResult() {
-  // Hide profile view and show placeholder
-  viewProfile.classList.remove('active');
-  viewPlaceholder.classList.add('active');
-
-  // Clear card text fields
-  mdlLastName.innerText = '';
-  mdlFirstName.innerText = '';
-  mdlDocNum.innerText = '';
-  mdlDob.innerText = '';
-  mdlIssue.innerText = '';
-  mdlExpiry.innerText = '';
-  mdlAuthority.innerText = '';
-
-  // Clear photo
-  mdlPhoto.src = '';
-  mdlPhoto.style.display = 'none';
-
-  // Clear privileges
-  privilegesBox.classList.remove('active');
-  privilegesList.innerHTML = '';
-
-  // Clear verification list
-  verificationList.innerHTML = '';
-
-  // Reset verification badge
-  const statusBadge = document.getElementById('verification-status-badge');
-  if (statusBadge) {
-    statusBadge.className = 'verification-status-badge unverified';
-    const badgeText = statusBadge.querySelector('.badge-text');
-    if (badgeText) {
-      badgeText.innerText = 'UNVERIFIED';
+  try {
+    appendLog('[System] Clearing previous scan results from UI...', 'system');
+    
+    // Hide profile view and show placeholder using classes and explicit inline styles
+    if (viewProfile) {
+      viewProfile.classList.remove('active');
+      viewProfile.style.display = 'none';
     }
+    if (viewPlaceholder) {
+      viewPlaceholder.classList.add('active');
+      viewPlaceholder.style.display = 'flex';
+    }
+
+    // Clear card text fields
+    if (mdlLastName) mdlLastName.innerText = '-';
+    if (mdlFirstName) mdlFirstName.innerText = '-';
+    if (mdlDocNum) mdlDocNum.innerText = '-';
+    if (mdlDob) mdlDob.innerText = '-';
+    if (mdlIssue) mdlIssue.innerText = '-';
+    if (mdlExpiry) mdlExpiry.innerText = '-';
+    if (mdlAuthority) mdlAuthority.innerText = '-';
+
+    // Clear photo
+    if (mdlPhoto) {
+      mdlPhoto.src = '';
+      mdlPhoto.style.display = 'none';
+    }
+
+    // Clear privileges
+    if (privilegesBox) privilegesBox.classList.remove('active');
+    if (privilegesList) privilegesList.innerHTML = '';
+
+    // Clear verification list
+    if (verificationList) verificationList.innerHTML = '';
+
+    // Reset verification badge
+    const statusBadge = document.getElementById('verification-status-badge');
+    if (statusBadge) {
+      statusBadge.className = 'verification-status-badge unverified';
+      const badgeText = statusBadge.querySelector('.badge-text');
+      if (badgeText) {
+        badgeText.innerText = 'UNVERIFIED';
+      }
+    }
+    appendLog('[System] UI reset completed successfully.', 'system');
+  } catch (err) {
+    appendLog(`[System Error] clearPreviousResult failed: ${err.message}`, 'error');
   }
 }
 
@@ -179,6 +194,7 @@ window.api.onStatusUpdate(({ state, message }) => {
       break;
     case 'NFC_WAITING':
     case 'NFC_READING':
+      clearPreviousResult();
       statusDot.classList.add('state-listening');
       break;
     case 'BLE_SCANNING':
@@ -204,89 +220,113 @@ window.api.onStatusUpdate(({ state, message }) => {
 
 // 4. Decoded Card Profile Handler
 window.api.onProfileDecoded((profile) => {
-  // Update view panel visibility
-  viewPlaceholder.classList.remove('active');
-  viewProfile.classList.add('active');
-
-  // Fill in card fields
-  mdlLastName.innerText = profile.familyName;
-  mdlFirstName.innerText = profile.givenName;
-  mdlDocNum.innerText = profile.documentNumber;
-  mdlDob.innerText = profile.birthDate;
-  mdlIssue.innerText = profile.issueDate;
-  mdlExpiry.innerText = profile.expiryDate;
-  mdlAuthority.innerText = profile.issuingAuthority;
-
-  // Update verification status badge
-  const statusBadge = document.getElementById('verification-status-badge');
-  const badgeText = statusBadge.querySelector('.badge-text');
-  
-  if (profile.verification && profile.verification.length > 0) {
-    const hasFailedChecks = profile.verification.some(check => check.status === 'FAILED');
-    if (hasFailedChecks) {
-      statusBadge.className = 'verification-status-badge warning';
-      badgeText.innerText = 'VERIFICATION WARNING';
-    } else {
-      statusBadge.className = 'verification-status-badge verified';
-      badgeText.innerText = 'VERIFIED';
+  try {
+    appendLog('[System] Received decoded profile. Rendering...', 'system');
+    // Update view panel visibility using classes and explicit inline styles (override specificity/caching issues)
+    if (viewPlaceholder) {
+      viewPlaceholder.classList.remove('active');
+      viewPlaceholder.style.display = 'none';
     }
-  } else {
-    statusBadge.className = 'verification-status-badge unverified';
-    badgeText.innerText = 'UNVERIFIED';
-  }
+    if (viewProfile) {
+      viewProfile.classList.add('active');
+      viewProfile.style.display = 'flex';
+    }
 
-  // Set Portrait photo
-  if (profile.photo) {
-    mdlPhoto.src = profile.photo;
-    mdlPhoto.style.display = 'block';
-  } else {
-    mdlPhoto.style.display = 'none';
-  }
+    // Fill in card fields
+    if (mdlLastName) mdlLastName.innerText = profile.familyName || '-';
+    if (mdlFirstName) mdlFirstName.innerText = profile.givenName || '-';
+    if (mdlDocNum) mdlDocNum.innerText = profile.documentNumber || '-';
+    if (mdlDob) mdlDob.innerText = profile.birthDate || '-';
+    if (mdlIssue) mdlIssue.innerText = profile.issueDate || '-';
+    if (mdlExpiry) mdlExpiry.innerText = profile.expiryDate || '-';
+    if (mdlAuthority) mdlAuthority.innerText = profile.issuingAuthority || '-';
 
-  // Populate driving privileges
-  privilegesList.innerHTML = '';
-  if (profile.drivingPrivileges && profile.drivingPrivileges.length > 0) {
-    privilegesBox.classList.add('active');
-    
-    profile.drivingPrivileges.forEach(priv => {
-      const badge = document.createElement('div');
-      badge.className = 'privilege-badge';
-      
-      const code = document.createElement('span');
-      code.className = 'code';
-      code.innerText = priv.vehicleCode;
-      
-      const dates = document.createElement('span');
-      dates.className = 'dates';
-      dates.innerText = `${priv.issueDate} / ${priv.expiryDate}`;
-      
-      badge.appendChild(code);
-      badge.appendChild(dates);
-      privilegesList.appendChild(badge);
-    });
-  } else {
-    privilegesBox.classList.remove('active');
-  }
+    // Update verification status badge
+    const statusBadge = document.getElementById('verification-status-badge');
+    if (statusBadge) {
+      const badgeText = statusBadge.querySelector('.badge-text');
+      if (badgeText) {
+        if (profile.verification && profile.verification.length > 0) {
+          const hasFailedChecks = profile.verification.some(check => check.status === 'FAILED');
+          if (hasFailedChecks) {
+            statusBadge.className = 'verification-status-badge warning';
+            badgeText.innerText = 'VERIFICATION WARNING';
+          } else {
+            statusBadge.className = 'verification-status-badge verified';
+            badgeText.innerText = 'VERIFIED';
+          }
+        } else {
+          statusBadge.className = 'verification-status-badge unverified';
+          badgeText.innerText = 'UNVERIFIED';
+        }
+      }
+    }
 
-  // Populate Cryptographic Verification Audit log
-  verificationList.innerHTML = '';
-  if (profile.verification && profile.verification.length > 0) {
-    profile.verification.forEach(check => {
-      const item = document.createElement('li');
-      const passed = check.status === 'PASSED';
-      item.className = `verification-item ${passed ? 'passed' : 'failed'}`;
+    // Set Portrait photo
+    if (mdlPhoto) {
+      if (profile.photo) {
+        mdlPhoto.src = profile.photo;
+        mdlPhoto.style.display = 'block';
+      } else {
+        mdlPhoto.style.display = 'none';
+      }
+    }
 
-      const name = document.createElement('span');
-      name.className = 'check-name';
-      name.innerText = check.check;
+    // Populate driving privileges
+    if (privilegesList) privilegesList.innerHTML = '';
+    if (privilegesBox) {
+      if (profile.drivingPrivileges && profile.drivingPrivileges.length > 0) {
+        privilegesBox.classList.add('active');
+        
+        profile.drivingPrivileges.forEach(priv => {
+          const badge = document.createElement('div');
+          badge.className = 'privilege-badge';
+          
+          const code = document.createElement('span');
+          code.className = 'code';
+          code.innerText = priv.vehicleCode;
+          
+          const dates = document.createElement('span');
+          dates.className = 'dates';
+          dates.innerText = `${priv.issueDate} / ${priv.expiryDate}`;
+          
+          badge.appendChild(code);
+          badge.appendChild(dates);
+          if (privilegesList) privilegesList.appendChild(badge);
+        });
+      } else {
+        privilegesBox.classList.remove('active');
+      }
+    }
 
-      const status = document.createElement('span');
-      status.className = 'check-status';
-      status.innerText = check.status;
+    // Populate Cryptographic Verification Audit log
+    if (verificationList) {
+      verificationList.innerHTML = '';
+      if (profile.verification && profile.verification.length > 0) {
+        profile.verification.forEach(check => {
+          const item = document.createElement('li');
+          const passed = check.status === 'PASSED';
+          item.className = `verification-item ${passed ? 'passed' : 'failed'}`;
 
-      item.appendChild(name);
-      item.appendChild(status);
-      verificationList.appendChild(item);
-    });
+          const name = document.createElement('span');
+          name.className = 'check-name';
+          name.innerText = check.check;
+
+          const status = document.createElement('span');
+          status.className = 'check-status';
+          status.innerText = check.status;
+
+          item.appendChild(name);
+          item.appendChild(status);
+          verificationList.appendChild(item);
+        });
+      }
+    }
+    appendLog('[System] Render completed successfully.', 'system');
+  } catch (err) {
+    appendLog(`[System Error] onProfileDecoded failed: ${err.message}`, 'error');
   }
 });
+
+// On Load
+appendLog('[System] mdoc Verifier UI loaded (Build: Debug UI Reset).', 'system');

@@ -311,8 +311,12 @@ body {
   justify-content: center;
 }
 
-#view-profile {
+#view-profile.active {
   display: flex;
+}
+
+#view-profile {
+  display: none;
   flex-direction: row;
   flex-wrap: wrap;
   justify-content: center;
