@@ -9,6 +9,8 @@ This verifier application establishes a secure connection with a mobile wallet, 
 ## Features
 
 - **NFC TNEP Negotiated Handover**: Negotiates BLE transfer parameters over NFC using a PC/SC compliant NFC reader (e.g., ACS ACR1252). Performs AID selection, capability container parsing, TNEP service selection, and reads the Handover Select (`Hs`) message.
+  - **HCE Connection Recovery**: Terminates connections with the `SCARD_RESET_CARD` disposition to recycle the card state and reset the phone's HCE stack. This prevents the phone from getting into a wedged state that causes `SCARD_E_NOT_TRANSACTED (0x80100016)` on subsequent taps.
+  - **Stabilization Delays**: Implements a 150ms reader channel stabilization delay and a 100ms NDEF preparation delay to allow mobile wallets sufficient time to bind background services and generate keys.
 - **Dynamic BLE Service UUID Injection**: Generates a random 128-bit UUID for each session, serializes it in little-endian format, and injects it into the Handover Request (`Hr`) BLE Carrier Configuration Record so the phone's wallet knows which service UUID to advertise.
 - **Robust BLE Transfer & Spec Compliance**:
   - **CoreBluetooth MTU Fallback**: Falls back to a conservative, spec-compliant MTU of 23 bytes (19-byte data fragments) to ensure reliable writes on macOS CoreBluetooth without relying on explicit MTU negotiation.

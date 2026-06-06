@@ -115,8 +115,8 @@ class NFCHandler {
     this.lastHrMessage = null;
     this.bleServiceUuid = crypto.randomUUID();
 
-    // Introduce 10ms delay to allow phone HCE binding to stabilize
-    this.logger('Waiting 10ms for card channel stabilization...');
+    // Introduce 150ms delay to allow phone HCE binding to stabilize
+    this.logger('Waiting 150ms for card channel stabilization...');
     setTimeout(() => {
       let flowSucceeded = false;
       this.readNDEFData(reader, protocol)
@@ -151,7 +151,9 @@ class NFCHandler {
           if (!flowSucceeded) {
             this.isProcessing = false;
           }
-          reader.disconnect(reader.SCARD_LEAVE_CARD, (err) => {
+          // Disconnect with SCARD_RESET_CARD to cycle the card status and reset the HCE applet state.
+          // This prevents the phone from remaining in a wedged state on failed or dropped taps.
+          reader.disconnect(reader.SCARD_RESET_CARD, (err) => {
             if (err) {
               this.logger(`NFC disconnect error: ${err.message}`);
             } else {
@@ -287,9 +289,9 @@ class NFCHandler {
         'Select NDEF File'
       );
 
-      // Wait 10ms for the phone's HCE service to prepare/serialize the NDEF data (e.g. key generation)
-      this.logger('Waiting 10ms for HCE NDEF data preparation...');
-      await this.delay(10);
+      // Wait 100ms for the phone's HCE service to prepare/serialize the NDEF data (e.g. key generation)
+      this.logger('Waiting 100ms for HCE NDEF data preparation...');
+      await this.delay(100);
     }
 
     // Read NLEN (first 2 bytes of NDEF File)
