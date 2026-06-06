@@ -29,6 +29,42 @@ const verificationList = document.getElementById('verification-list');
 // Active State
 let isListening = false;
 
+function clearPreviousResult() {
+  // Hide profile view and show placeholder
+  viewProfile.classList.remove('active');
+  viewPlaceholder.classList.add('active');
+
+  // Clear card text fields
+  mdlLastName.innerText = '';
+  mdlFirstName.innerText = '';
+  mdlDocNum.innerText = '';
+  mdlDob.innerText = '';
+  mdlIssue.innerText = '';
+  mdlExpiry.innerText = '';
+  mdlAuthority.innerText = '';
+
+  // Clear photo
+  mdlPhoto.src = '';
+  mdlPhoto.style.display = 'none';
+
+  // Clear privileges
+  privilegesBox.classList.remove('active');
+  privilegesList.innerHTML = '';
+
+  // Clear verification list
+  verificationList.innerHTML = '';
+
+  // Reset verification badge
+  const statusBadge = document.getElementById('verification-status-badge');
+  if (statusBadge) {
+    statusBadge.className = 'verification-status-badge unverified';
+    const badgeText = statusBadge.querySelector('.badge-text');
+    if (badgeText) {
+      badgeText.innerText = 'UNVERIFIED';
+    }
+  }
+}
+
 // 1. Control Button Event Listeners
 btnScan.addEventListener('click', async () => {
   if (isListening) return;
@@ -37,6 +73,8 @@ btnScan.addEventListener('click', async () => {
   btnScan.disabled = true;
   btnStop.disabled = false;
   btnSimulate.disabled = true;
+
+  clearPreviousResult();
 
   appendLog('[System] Starting NFC and BLE reader interfaces...', 'system');
   try {
@@ -70,6 +108,8 @@ btnSimulate.addEventListener('click', async () => {
   btnScan.disabled = true;
   btnStop.disabled = true;
   btnSimulate.disabled = true;
+
+  clearPreviousResult();
 
   try {
     await window.api.runSimulator();

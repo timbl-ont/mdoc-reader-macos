@@ -21,6 +21,7 @@ class BLEHandler {
     this.isTransferring = false;
     this.sessionActive = false;
     this.scanTimeout = null;
+    this.disconnectTimeout = null;
     
     this.bindEvents();
   }
@@ -175,6 +176,10 @@ class BLEHandler {
 
     peripheral.on('disconnect', () => {
       this.logger('BLE Peripheral disconnected.');
+      if (this.disconnectTimeout) {
+        clearTimeout(this.disconnectTimeout);
+        this.disconnectTimeout = null;
+      }
       const wasActive = this.sessionActive;
       this.stateChar = null;
       this.client2ServerChar = null;
@@ -324,17 +329,31 @@ class BLEHandler {
     if (!this.stateChar) return;
 
     this.logger('Sending END command (0x02) to State characteristic...');
+    this.sessionActive = false; // We are ending cleanly, don't trigger drop error
+
     this.stateChar.write(Buffer.from([0x02]), true, (err) => {
       if (err) {
         this.logger(`Write END error: ${err.message}`);
-      } else {
-        this.logger('END command sent successfully.');
+        this.disconnect();
+        return;
       }
-      this.disconnect();
+      this.logger('END command sent successfully. Waiting for phone to disconnect...');
+      
+      if (this.disconnectTimeout) {
+        clearTimeout(this.disconnectTimeout);
+      }
+      this.disconnectTimeout = setTimeout(() => {
+        this.logger('Phone did not disconnect within 5 seconds. Force disconnecting...');
+        this.disconnect();
+      }, 5000);
     });
   }
 
   disconnect() {
+    if (this.disconnectTimeout) {
+      clearTimeout(this.disconnectTimeout);
+      this.disconnectTimeout = null;
+    }
     if (this.discoveredPeripheral) {
       this.logger('Disconnecting BLE peripheral...');
       this.sessionActive = false; // Prevent unexpected disconnect error trigger
