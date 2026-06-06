@@ -3,11 +3,13 @@ const crypto = require('crypto');
 
 
 class NFCHandler {
-  constructor(logger, onDeviceEngagement) {
+  constructor(logger, onDeviceEngagement, onStatusChange) {
     this.logger = logger || console.log;
     this.onDeviceEngagement = onDeviceEngagement;
+    this.onStatusChange = onStatusChange || (() => {});
     this.pcsc = null;
     this.activeReader = null;
+    this.isProcessing = false;
     
     // Status tracking for direct ISO 18013-5 selection vs NDEF handover
     this.isDirectMdlEngagement = false;
@@ -75,9 +77,16 @@ class NFCHandler {
       this.pcsc = null;
       this.activeReader = null;
     }
+    this.isProcessing = false;
   }
 
   handleCardTap(reader) {
+    if (this.isProcessing) {
+      this.logger('NFC tap ignored: transaction already in progress.');
+      return;
+    }
+    this.isProcessing = true;
+
     // Connect with EXCLUSIVE mode to prevent com.apple.ifdreader sharing conflicts
     reader.connect({ share_mode: reader.SCARD_SHARE_EXCLUSIVE }, (err, protocol) => {
       if (err) {
@@ -86,6 +95,7 @@ class NFCHandler {
         reader.connect({ share_mode: reader.SCARD_SHARE_SHARED }, (err2, protocol2) => {
           if (err2) {
             this.logger(`NFC fallback connection failed: ${err2.message}`);
+            this.isProcessing = false;
             return;
           }
           this.executeHandoverFlow(reader, protocol2);
@@ -108,12 +118,14 @@ class NFCHandler {
     // Introduce 10ms delay to allow phone HCE binding to stabilize
     this.logger('Waiting 10ms for card channel stabilization...');
     setTimeout(() => {
+      let flowSucceeded = false;
       this.readNDEFData(reader, protocol)
         .then(async (dataBuffer) => {
           if (this.isDirectMdlEngagement) {
             this.lastNdefMessage = null;
             this.lastHrMessage = null;
             this.logger('Successfully retrieved Device Engagement via direct mDL AID selection.');
+            flowSucceeded = true;
             if (this.onDeviceEngagement) {
               this.onDeviceEngagement(dataBuffer, null, null);
             }
@@ -121,12 +133,24 @@ class NFCHandler {
             this.lastNdefMessage = dataBuffer;
             this.logger(`Successfully read NDEF message (${dataBuffer.length} bytes).`);
             await this.parseNDEFDeviceEngagement(dataBuffer, reader, protocol);
+            flowSucceeded = true;
           }
         })
         .catch((err) => {
           this.logger(`NFC Reading failed: ${err.message}`);
+          
+          const isHandoverDrop = err.message.includes('0x80100016') || err.message.includes('Transaction failed');
+          if (isHandoverDrop) {
+            this.logger('Handover dropped (likely due to wallet app launching on phone). Prompting for retap.');
+            this.onStatusChange('NFC_WAITING', 'Wallet app launched. Please tap phone again to complete handover.');
+          } else {
+            this.onStatusChange('ERROR', `NFC Read Failed: ${err.message}`);
+          }
         })
         .finally(() => {
+          if (!flowSucceeded) {
+            this.isProcessing = false;
+          }
           reader.disconnect(reader.SCARD_LEAVE_CARD, (err) => {
             if (err) {
               this.logger(`NFC disconnect error: ${err.message}`);

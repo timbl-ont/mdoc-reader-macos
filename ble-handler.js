@@ -5,9 +5,10 @@ const CLIENT2SERVER_UUID = '00000002-a123-48ce-896b-4c76973373e6';
 const SERVER2CLIENT_UUID = '00000003-a123-48ce-896b-4c76973373e6';
 
 class BLEHandler {
-  constructor(logger, onResponseReceived) {
+  constructor(logger, onResponseReceived, onError) {
     this.logger = logger || console.log;
     this.onResponseReceived = onResponseReceived;
+    this.onError = onError || (() => {});
     this.targetServiceUuid = null;
     
     this.discoveredPeripheral = null;
@@ -18,6 +19,8 @@ class BLEHandler {
     // Buffer to reassemble fragmented responses
     this.responseBuffer = Buffer.alloc(0);
     this.isTransferring = false;
+    this.sessionActive = false;
+    this.scanTimeout = null;
     
     this.bindEvents();
   }
@@ -28,6 +31,7 @@ class BLEHandler {
     });
 
     noble.on('discover', (peripheral) => {
+      if (!this.targetServiceUuid) return;
       const serviceUuids = peripheral.advertisement.serviceUuids || [];
       this.logger(`Discovered BLE device: "${peripheral.advertisement.localName || 'Unknown'}" (ID: ${peripheral.id}, RSSI: ${peripheral.rssi}) Services: [${serviceUuids}]`);
 
@@ -38,6 +42,10 @@ class BLEHandler {
 
       if (match) {
         this.logger(`Found target mDL Peripheral: ${peripheral.id}`);
+        if (this.scanTimeout) {
+          clearTimeout(this.scanTimeout);
+          this.scanTimeout = null;
+        }
         this.discoveredPeripheral = peripheral;
         this.stopScanning();
         this.connectToDevice(peripheral);
@@ -62,7 +70,19 @@ class BLEHandler {
     this.targetServiceUuid = serviceUuid;
     this.discoveredPeripheral = null;
     this.isTransferring = false;
+    this.sessionActive = false;
     this.responseBuffer = Buffer.alloc(0);
+
+    if (this.scanTimeout) {
+      clearTimeout(this.scanTimeout);
+    }
+    this.scanTimeout = setTimeout(() => {
+      if (!this.discoveredPeripheral) {
+        this.logger('BLE Scan timeout: target device not found within 15s.');
+        this.stopScanning();
+        this.onError(new Error('BLE scanning timed out. No device found.'));
+      }
+    }, 15000);
 
     const normalUuid = serviceUuid.replace(/-/g, '').toLowerCase();
     this.logger(`Starting scan for BLE peripheral service: ${serviceUuid} (normalized: ${normalUuid})`);
@@ -77,6 +97,7 @@ class BLEHandler {
           noble.startScanning([normalUuid], false);
         } else {
           this.logger(`Cannot scan, BLE adapter state is: ${state}`);
+          this.onError(new Error(`BLE adapter not powered on. State: ${state}`));
         }
       });
     }
@@ -84,6 +105,10 @@ class BLEHandler {
 
   stopScanning() {
     this.logger('Stopping BLE scan...');
+    if (this.scanTimeout) {
+      clearTimeout(this.scanTimeout);
+      this.scanTimeout = null;
+    }
     noble.stopScanning();
   }
 
@@ -93,9 +118,11 @@ class BLEHandler {
     peripheral.connect((err) => {
       if (err) {
         this.logger(`Connection error: ${err.message}`);
+        this.onError(new Error(`BLE connection failed: ${err.message}`));
         return;
       }
       this.logger('Connected successfully to mDL device.');
+      this.sessionActive = true;
 
       // Discover mDL service and characteristics
       const targetServiceNormal = this.targetServiceUuid.replace(/-/g, '').toLowerCase();
@@ -111,6 +138,7 @@ class BLEHandler {
         (err, services, characteristics) => {
           if (err) {
             this.logger(`Discovery error: ${err.message}`);
+            this.onError(new Error(`BLE service discovery failed: ${err.message}`));
             this.disconnect();
             return;
           }
@@ -134,6 +162,7 @@ class BLEHandler {
 
           if (!this.stateChar || !this.client2ServerChar || !this.server2ClientChar) {
             this.logger('Error: Required GATT characteristics (State, Client2Server, Server2Client) were not fully discovered.');
+            this.onError(new Error('Required GATT characteristics were not fully discovered.'));
             this.disconnect();
             return;
           }
@@ -146,10 +175,16 @@ class BLEHandler {
 
     peripheral.on('disconnect', () => {
       this.logger('BLE Peripheral disconnected.');
+      const wasActive = this.sessionActive;
       this.stateChar = null;
       this.client2ServerChar = null;
       this.server2ClientChar = null;
       this.discoveredPeripheral = null;
+      this.sessionActive = false;
+
+      if (wasActive) {
+        this.onError(new Error('BLE connection dropped unexpectedly during transaction.'));
+      }
     });
   }
 
@@ -159,6 +194,7 @@ class BLEHandler {
     this.server2ClientChar.subscribe((err) => {
       if (err) {
         this.logger(`Subscribe error: ${err.message}`);
+        this.onError(new Error(`BLE subscribe to Server2Client failed: ${err.message}`));
         this.disconnect();
         return;
       }
@@ -174,6 +210,7 @@ class BLEHandler {
       this.stateChar.write(Buffer.from([0x01]), true, (err) => {
         if (err) {
           this.logger(`Write START error: ${err.message}`);
+          this.onError(new Error(`BLE write START failed: ${err.message}`));
           this.disconnect();
           return;
         }
@@ -188,13 +225,14 @@ class BLEHandler {
   }
 
   /**
-   * Sends the SessionEstablishment request to the peripheral using fragmentation.
+   * Sends the SessionEstablish request to the peripheral using fragmentation.
    * 
    * @param {Buffer} requestPayload CBOR-encoded SessionEstablishment
    */
   async sendRequestPayload(requestPayload) {
     if (!this.client2ServerChar) {
       this.logger('Error: Cannot send request, Client2Server characteristic not available.');
+      this.onError(new Error('Client2Server characteristic not available'));
       return;
     }
 
@@ -202,14 +240,14 @@ class BLEHandler {
     this.isTransferring = true;
     this.responseBuffer = Buffer.alloc(0);
 
-    // Negotiated MTU check (macOS usually negotiates 247-512, noble handles this under the hood)
-    // Safe chunk size: GATT MTU - 3 overhead.
-    // If peripheral.mtu is not set or accessible, default to 244 byte packet size (247 MTU).
-    const mtu = this.discoveredPeripheral.mtu || 247;
+    // Use a conservative, guaranteed MTU size of 23 (20 bytes packet size, 19 bytes payload)
+    // to ensure compatibility with all platforms (like macOS CoreBluetooth) and mobile wallets
+    // without relying on non-deterministic OS-level MTU negotiation.
+    const mtu = 23;
     const maxPacketSize = mtu - 3;
     const maxDataSize = maxPacketSize - 1; // Subtract 1 byte for the fragmentation flag
 
-    this.logger(`Negotiated MTU: ${mtu}. Usable packet size: ${maxPacketSize} bytes. Max fragment data: ${maxDataSize} bytes.`);
+    this.logger(`Using fallback MTU: ${mtu}. Usable packet size: ${maxPacketSize} bytes. Max fragment data: ${maxDataSize} bytes.`);
 
     let offset = 0;
     let chunkCounter = 0;
@@ -227,7 +265,14 @@ class BLEHandler {
       chunkCounter++;
       this.logger(`Writing request fragment #${chunkCounter} (size: ${packet.length} bytes, flag: ${flag})...`);
 
-      await this.writeFragment(this.client2ServerChar, packet);
+      try {
+        await this.writeFragment(this.client2ServerChar, packet);
+      } catch (err) {
+        this.logger(`Error writing fragment #${chunkCounter}: ${err.message}`);
+        this.onError(new Error(`BLE fragment write failed: ${err.message}`));
+        this.disconnect();
+        return;
+      }
       offset += readLen;
 
       // Small throttling delay to prevent flooding BLE buffer on macOS
@@ -263,6 +308,7 @@ class BLEHandler {
     if (flag === 0x00) {
       this.logger(`Response reassembly complete. Total size: ${this.responseBuffer.length} bytes.`);
       this.isTransferring = false;
+      this.sessionActive = false; // Mark session inactive so manual disconnect doesn't report drop error
 
       // Trigger callback to process response
       if (this.onResponseReceived) {
@@ -291,6 +337,7 @@ class BLEHandler {
   disconnect() {
     if (this.discoveredPeripheral) {
       this.logger('Disconnecting BLE peripheral...');
+      this.sessionActive = false; // Prevent unexpected disconnect error trigger
       this.discoveredPeripheral.disconnect();
     }
   }

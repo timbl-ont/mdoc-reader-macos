@@ -44,6 +44,9 @@ function sendStatus(state, message) {
   if (mainWindow) {
     mainWindow.webContents.send('status-update', { state, message });
   }
+  if (nfcHandler && (state === 'SUCCESS' || state === 'ERROR' || state === 'IDLE')) {
+    nfcHandler.isProcessing = false;
+  }
 }
 
 function stopAllDevices() {
@@ -61,68 +64,81 @@ app.whenReady().then(() => {
   mdlParser = new MDLParser(logToRenderer);
 
   // Initialize NFC Handler
-  nfcHandler = new NFCHandler(logToRenderer, async (deviceEngagementBytes, ndefSelectMessageBytes, ndefRequestMessageBytes) => {
-    // NFC Tap callback: extracts engagement payload
-    sendStatus('NFC_READING', 'Device Engagement read. Initializing cryptographic session...');
-    
-    try {
-      const isDirectNfc = nfcHandler.isDirectMdlEngagement;
+  nfcHandler = new NFCHandler(
+    logToRenderer,
+    async (deviceEngagementBytes, ndefSelectMessageBytes, ndefRequestMessageBytes) => {
+      // NFC Tap callback: extracts engagement payload
+      sendStatus('NFC_READING', 'Device Engagement read. Initializing cryptographic session...');
       
-      await mdlParser.initializeSession(deviceEngagementBytes, ndefSelectMessageBytes, isDirectNfc, ndefRequestMessageBytes);
-      
-      // Extract BLE Service UUID
-      let bleServiceUuid;
-      if (ndefSelectMessageBytes && nfcHandler.bleServiceUuid) {
-        bleServiceUuid = nfcHandler.bleServiceUuid;
-        logToRenderer(`Using TNEP negotiated BLE Service UUID: ${bleServiceUuid}`);
-      } else {
-        bleServiceUuid = extractBleServiceUuid(mdlParser.deviceEngagement);
-        if (!bleServiceUuid) {
-          throw new Error('No compatible BLE Retrieval Method found in Device Engagement.');
+      try {
+        const isDirectNfc = nfcHandler.isDirectMdlEngagement;
+        
+        await mdlParser.initializeSession(deviceEngagementBytes, ndefSelectMessageBytes, isDirectNfc, ndefRequestMessageBytes);
+        
+        // Extract BLE Service UUID
+        let bleServiceUuid;
+        if (ndefSelectMessageBytes && nfcHandler.bleServiceUuid) {
+          bleServiceUuid = nfcHandler.bleServiceUuid;
+          logToRenderer(`Using TNEP negotiated BLE Service UUID: ${bleServiceUuid}`);
+        } else {
+          bleServiceUuid = extractBleServiceUuid(mdlParser.deviceEngagement);
+          if (!bleServiceUuid) {
+            throw new Error('No compatible BLE Retrieval Method found in Device Engagement.');
+          }
+          logToRenderer(`BLE Service UUID Extracted: ${bleServiceUuid}`);
         }
-        logToRenderer(`BLE Service UUID Extracted: ${bleServiceUuid}`);
+        
+        // Start BLE scanning
+        bleHandler.startScanning(bleServiceUuid);
+      } catch (err) {
+        logToRenderer(`Session Initialization Error: ${err.message}`);
+        sendStatus('ERROR', err.message);
       }
-      
-      // Start BLE scanning
-      bleHandler.startScanning(bleServiceUuid);
-    } catch (err) {
-      logToRenderer(`Session Initialization Error: ${err.message}`);
-      sendStatus('ERROR', err.message);
+    },
+    (state, msg) => {
+      sendStatus(state, msg);
     }
-  });
+  );
 
   // Initialize BLE Handler
-  bleHandler = new BLEHandler(logToRenderer, async (responseBytes) => {
-    // BLE response received callback
-    sendStatus('VERIFYING', 'Decrypting and verifying response signatures...');
-    try {
-      const profile = await mdlParser.processSessionResponse(responseBytes);
-      sendStatus('SUCCESS', 'mDL Verified Successfully!');
-      
-      // Log attributes summary
-      logToRenderer('--------------------------------------------------');
-      logToRenderer('DECRYPTED mDL ATTRIBUTES SHARED:');
-      logToRenderer(`Family Name: ${profile.familyName}`);
-      logToRenderer(`Given Name(s): ${profile.givenName}`);
-      logToRenderer(`Document Number: ${profile.documentNumber}`);
-      logToRenderer(`Date of Birth: ${profile.birthDate}`);
-      logToRenderer(`Issue Date: ${profile.issueDate}`);
-      logToRenderer(`Expiry Date: ${profile.expiryDate}`);
-      logToRenderer(`Issuing Authority: ${profile.issuingAuthority}`);
-      if (profile.drivingPrivileges && profile.drivingPrivileges.length > 0) {
-        logToRenderer(`Driving Privileges: ${JSON.stringify(profile.drivingPrivileges)}`);
+  bleHandler = new BLEHandler(
+    logToRenderer,
+    async (responseBytes) => {
+      // BLE response received callback
+      sendStatus('VERIFYING', 'Decrypting and verifying response signatures...');
+      try {
+        const profile = await mdlParser.processSessionResponse(responseBytes);
+        sendStatus('SUCCESS', 'mDL Verified Successfully!');
+        
+        // Log attributes summary
+        logToRenderer('--------------------------------------------------');
+        logToRenderer('DECRYPTED mDL ATTRIBUTES SHARED:');
+        logToRenderer(`Family Name: ${profile.familyName}`);
+        logToRenderer(`Given Name(s): ${profile.givenName}`);
+        logToRenderer(`Document Number: ${profile.documentNumber}`);
+        logToRenderer(`Date of Birth: ${profile.birthDate}`);
+        logToRenderer(`Issue Date: ${profile.issueDate}`);
+        logToRenderer(`Expiry Date: ${profile.expiryDate}`);
+        logToRenderer(`Issuing Authority: ${profile.issuingAuthority}`);
+        if (profile.drivingPrivileges && profile.drivingPrivileges.length > 0) {
+          logToRenderer(`Driving Privileges: ${JSON.stringify(profile.drivingPrivileges)}`);
+        }
+        const hasFailedChecks = profile.verification.some(check => check.status === 'FAILED');
+        const finalResult = hasFailedChecks ? 'VERIFICATION WARNING' : 'VERIFIED';
+        logToRenderer(`OVERALL VERIFICATION RESULT: ${finalResult}`);
+        logToRenderer('--------------------------------------------------');
+        
+        mainWindow.webContents.send('profile-decoded', profile);
+      } catch (err) {
+        logToRenderer(`Error processing SessionResponse: ${err.message}`);
+        sendStatus('ERROR', err.message);
       }
-      const hasFailedChecks = profile.verification.some(check => check.status === 'FAILED');
-      const finalResult = hasFailedChecks ? 'VERIFICATION WARNING' : 'VERIFIED';
-      logToRenderer(`OVERALL VERIFICATION RESULT: ${finalResult}`);
-      logToRenderer('--------------------------------------------------');
-      
-      mainWindow.webContents.send('profile-decoded', profile);
-    } catch (err) {
-      logToRenderer(`Error processing SessionResponse: ${err.message}`);
+    },
+    (err) => {
+      logToRenderer(`BLE Error: ${err.message}`);
       sendStatus('ERROR', err.message);
     }
-  });
+  );
 
   // Set up BLE request sender trigger
   bleHandler.onReadyToSendRequest = async () => {
