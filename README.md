@@ -1,8 +1,10 @@
 # mdoc-reader-macos
 
-A premium Electron-based desktop application for macOS to read and verify ISO 18013-5 Mobile Driver's Licenses (mDL) over **NFC Negotiated Handover** transitioning to **Bluetooth Low Energy (BLE)**.
+An Electron-based desktop application for macOS to read and verify ISO 18013-5 Mobile Driver's Licenses (mDL) over **NFC Negotiated Handover** transitioning to **Bluetooth Low Energy (BLE)**, developed via Google Antigravity. This project leverages OWF mdoc-ts.
 
 This verifier application establishes a secure connection with a mobile wallet, exchanges encrypted requests/responses, decrypts mDL attributes, and runs a comprehensive suite of cryptographic integrity audits.
+
+**Important**: This code works for my purposes but is experimental at best.
 
 ---
 
@@ -28,7 +30,6 @@ This verifier application establishes a secure connection with a mobile wallet, 
   - Verifies `IssuerAuth` signatures (Mobile Security Object - MSO) against trusted DS certificates.
   - Recalculates value digest hashes for each namespace element to ensure data integrity.
 - **Interactive Dashboard UI**:
-  - Premium dark-slate theme featuring responsive layouts, glowing status states, and a rotating radar welcome state.
   - **Side-by-Side Responsive Flex Layout**: Places the decoded mDL card and the Cryptographic Audit log panel side-by-side, wrapping cleanly on narrower viewports.
   - **State-Driven UI Resets**: Instantly clears old attributes and resets status indicators to unverified `'-'` states on starting a new reader session or simulator demo to prevent data persistence across scans. Instantly resets UI results on both `NFC_WAITING` and `NFC_READING` states to handle subsequent scans cleanly.
   - **CSS Specificity Bug Fix**: Configures `#view-profile` to default to `display: none;` and `#view-profile.active { display: flex; }` to resolve the CSS ID specificity collision that prevented result panels from hiding.

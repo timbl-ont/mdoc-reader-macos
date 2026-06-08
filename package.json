@@ -5,7 +5,8 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "rebuild": "electron-rebuild"
+    "rebuild": "electron-rebuild -f -w @pokusew/pcsclite",
+    "postinstall": "electron-rebuild -f -w @pokusew/pcsclite"
   },
   "dependencies": {
     "@abandonware/noble": "^1.9.2-19",
@@ -13,8 +14,8 @@
     "@pokusew/pcsclite": "^0.6.0"
   },
   "devDependencies": {
-    "electron": "^30.0.1",
-    "@electron/rebuild": "^3.3.0"
+    "@electron/rebuild": "^3.3.0",
+    "electron": "^30.5.1"
   },
   "keywords": [
     "mdoc",
